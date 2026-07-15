@@ -31,6 +31,21 @@ then
 
   /jci/tools/jci-dialog --info --title="oem-aa-mod" --text="Installing oem-aa-mod...\nDo not remove USB drive." --no-cancel &
 
+  # --- Read use_protocol_v1_6 from the config being deployed ---
+  # aap_service is only needed for GAL 1.6; default (missing file or key) is false.
+  CONF="${MYDIR}/resources/libpatch.conf"
+  USE_PROTOCOL_V16="false"
+  if [ -f "${CONF}" ]
+  then
+    val=$(sed 's/#.*//' "${CONF}" \
+            | grep -i '^[[:space:]]*use_protocol_v1_6[[:space:]]*=' \
+            | tail -n1 | cut -d'=' -f2- | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+    case "${val}" in
+      true|1|yes|on) USE_PROTOCOL_V16="true" ;;
+    esac
+  fi
+  echo "use_protocol_v1_6 = ${USE_PROTOCOL_V16} (from ${CONF})"
+
   # --- Backup and patch jciAAPA in sm.conf and sm_WCP.conf ---
   for conf in sm.conf sm_WCP.conf
   do
@@ -58,12 +73,17 @@ then
       echo "jcinavi already patched in ${conf}, skipping"
     fi
 
-    if ! grep -q "libpatch-aap_service" "/jci/sm/${conf}"
+    if [ "${USE_PROTOCOL_V16}" = "true" ]
     then
-      sed -i '/name="aap_service"/a\            <environ_var env_name="LD_PRELOAD" env_value="/data_persist/oem-aa-mod/libpatch-aap_service.so"/>' "/jci/sm/${conf}"
-      echo "Patched aap_service in ${conf}"
+      if ! grep -q "libpatch-aap_service" "/jci/sm/${conf}"
+      then
+        sed -i '/name="aap_service"/a\            <environ_var env_name="LD_PRELOAD" env_value="/data_persist/oem-aa-mod/libpatch-aap_service.so"/>' "/jci/sm/${conf}"
+        echo "Patched aap_service in ${conf}"
+      else
+        echo "aap_service already patched in ${conf}, skipping"
+      fi
     else
-      echo "aap_service already patched in ${conf}, skipping"
+      echo "use_protocol_v1_6 is false, skipping aap_service patch in ${conf}"
     fi
   done
 
@@ -73,8 +93,13 @@ then
   echo "libpatch-blmjciaapa.so has been copied"
   cp "${MYDIR}/libpatch-svcjcinavi.so" /data_persist/oem-aa-mod/
   echo "libpatch-svcjcinavi.so has been copied"
-  cp "${MYDIR}/libpatch-aap_service.so" /data_persist/oem-aa-mod/
-  echo "libpatch-aap_service.so has been copied"
+  if [ "${USE_PROTOCOL_V16}" = "true" ]
+  then
+    cp "${MYDIR}/libpatch-aap_service.so" /data_persist/oem-aa-mod/
+    echo "libpatch-aap_service.so has been copied"
+  else
+    echo "use_protocol_v1_6 is false, skipping libpatch-aap_service.so copy"
+  fi
   cp "${MYDIR}/resources/libpatch.conf" /data_persist/oem-aa-mod/
   echo "libpatch.conf has been copied"
   chmod 0644 /data_persist/oem-aa-mod/libpatch-*.so
