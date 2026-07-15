@@ -1,0 +1,104 @@
+name: Build Installer (Legacy Rebuild)
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'oem-aa-mod tag to build (blank = latest)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v4
+
+      - name: Resolve upstream tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "${{ inputs.upstream_tag }}" ]; then
+            TAG="${{ inputs.upstream_tag }}"
+          else
+            TAG=$(gh release list --repo VitaliyKurokhtin/oem-aa-mod \
+                    --limit 1 --json tagName -q '.[0].tagName')
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Upstream tag: $TAG"
+
+      - name: Skip if already built
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.upstream.outputs.tag }}"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Installer for $TAG already published, skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "New release $TAG detected — building."
+          fi
+
+      - name: Download upstream release zip
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.upstream.outputs.tag }}"
+          mkdir -p upstream
+          gh release download "$TAG" \
+            --repo VitaliyKurokhtin/oem-aa-mod \
+            --pattern "oem-aa-mod-${TAG}.zip" \
+            --dir upstream
+          unzip -q "upstream/oem-aa-mod-${TAG}.zip" -d upstream/extracted
+
+      - name: Package installer zip
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.upstream.outputs.tag }}"
+          name="oem-aa-mod-${TAG}-installer"
+          stage="staging/${name}"
+          src="upstream/extracted/oem-aa-mod-${TAG}"
+          mkdir -p "$stage"
+
+          # From this repo
+          cp run.sh "$stage/"
+          cp mp3title.txt "$stage/"
+          cp -r js "$stage/"
+          cp -r mp3 "$stage/"
+
+          # From upstream release zip (resources/ + .so files)
+          cp -r "$src/resources" "$stage/"
+          cp "$src"/libpatch-*.so "$stage/"
+
+          for so in "$stage"/libpatch-*.so; do
+            file "$so" | grep -q 'ELF 32-bit.*ARM' || {
+              echo "::error::$so is not an ARM shared object"; exit 1; }
+          done
+
+          mkdir -p dist
+          ( cd "$stage" && zip -r "../../dist/${name}.zip" . )
+          ( cd dist && sha256sum "${name}.zip" > SHA256SUMS )
+
+          echo "--- final zip contents ---"
+          unzip -l "dist/${name}.zip"
+
+      - name: Create release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            --title "oem-aa-mod $TAG Installer" \
+            --notes "Installer for [oem-aa-mod $TAG](https://github.com/VitaliyKurokhtin/oem-aa-mod/releases/tag/$TAG)." \
+            dist/*.zip dist/SHA256SUMS
