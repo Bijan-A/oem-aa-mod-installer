@@ -1,8 +1,37 @@
 name: Build Installer
 
 on:
-  schedule:
-    - cron: '0 * * * *'   # poll upstream every hour
+  workflow_call:
+    inputs:
+      upstream_tag:
+        description: 'oem-aa-mod tag to build'
+        required: true
+        type: string
+      upstream_repo:
+        description: 'Upstream repo (owner/name) that publishes the release zip'
+        required: false
+        type: string
+        default: VitaliyKurokhtin/oem-aa-mod
+      installer_repo:
+        description: 'This installer repo (owner/name) to build from'
+        required: false
+        type: string
+        default: Bijan-A/oem-aa-mod-installer
+      installer_ref:
+        description: 'Ref of this installer repo to build from'
+        required: false
+        type: string
+        default: master
+    outputs:
+      installer_zip:
+        description: 'Filename of the built installer zip'
+        value: ${{ jobs.build.outputs.installer_zip }}
+      artifact_name:
+        description: 'Name of the uploaded artifact bundle'
+        value: ${{ jobs.build.outputs.artifact_name }}
+      upstream_tag:
+        description: 'The upstream tag that was built'
+        value: ${{ jobs.build.outputs.upstream_tag }}
   workflow_dispatch:
     inputs:
       upstream_tag:
@@ -11,59 +40,53 @@ on:
         default: ''
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      installer_zip: ${{ steps.package.outputs.zip_name }}
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      upstream_tag: ${{ steps.package.outputs.tag }}
     steps:
-      - name: Check out this repo
+      - name: Check out installer repo
         uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.installer_repo || 'Bijan-A/oem-aa-mod-installer' }}
+          ref: ${{ inputs.installer_ref || 'master' }}
 
       - name: Resolve upstream tag
         id: upstream
         env:
           GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: ${{ inputs.upstream_repo || 'VitaliyKurokhtin/oem-aa-mod' }}
         run: |
           if [ -n "${{ inputs.upstream_tag }}" ]; then
             TAG="${{ inputs.upstream_tag }}"
           else
-            TAG=$(gh release list --repo VitaliyKurokhtin/oem-aa-mod \
+            TAG=$(gh release list --repo "$UPSTREAM_REPO" \
                     --limit 1 --json tagName -q '.[0].tagName')
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Upstream tag: $TAG"
 
-      - name: Skip if already built
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
-          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Installer for $TAG already published, skipping."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "New release $TAG detected — building."
-          fi
-
       - name: Download upstream release zip
-        if: steps.check.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: ${{ inputs.upstream_repo || 'VitaliyKurokhtin/oem-aa-mod' }}
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
           mkdir -p upstream
           gh release download "$TAG" \
-            --repo VitaliyKurokhtin/oem-aa-mod \
+            --repo "$UPSTREAM_REPO" \
             --pattern "oem-aa-mod-${TAG}.zip" \
             --dir upstream
           unzip -q "upstream/oem-aa-mod-${TAG}.zip" -d upstream/extracted
 
       - name: Package installer zip
-        if: steps.check.outputs.skip != 'true'
+        id: package
         run: |
           set -euo pipefail
           TAG="${{ steps.upstream.outputs.tag }}"
@@ -89,18 +112,52 @@ jobs:
 
           mkdir -p dist
           ( cd "$stage" && zip -r "../../dist/${name}.zip" . )
-          ( cd dist && sha256sum "${name}.zip" > SHA256SUMS )
+          ( cd dist && sha256sum "${name}.zip" > "${name}.SHA256SUMS" )
 
           echo "--- final zip contents ---"
           unzip -l "dist/${name}.zip"
 
+          {
+            echo "zip_name=${name}.zip"
+            echo "artifact_name=${name}"
+            echo "tag=${TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            dist/${{ steps.package.outputs.zip_name }}
+            dist/${{ steps.package.outputs.artifact_name }}.SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  # Standalone / manual runs publish an installer release in THIS repo.
+  # When called from the upstream repo via workflow_call, the caller
+  # collects the artifact and attaches it to the upstream release instead.
+  publish-self:
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: dist
+
       - name: Create release
-        if: steps.check.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.upstream.outputs.tag }}
+          TAG: ${{ needs.build.outputs.upstream_tag }}
         run: |
+          set -euo pipefail
           gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
             --title "oem-aa-mod $TAG Installer" \
             --notes "Installer for [oem-aa-mod $TAG](https://github.com/VitaliyKurokhtin/oem-aa-mod/releases/tag/$TAG)." \
-            dist/*.zip dist/SHA256SUMS
+            dist/* \
+          || gh release upload "$TAG" dist/* --repo "${{ github.repository }}" --clobber
