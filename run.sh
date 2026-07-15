@@ -57,6 +57,14 @@ then
     else
       echo "jcinavi already patched in ${conf}, skipping"
     fi
+
+    if ! grep -q "libpatch-aap_service" "/jci/sm/${conf}"
+    then
+      sed -i '/name="aap_service"/a\            <environ_var env_name="LD_PRELOAD" env_value="/data_persist/oem-aa-mod/libpatch-aap_service.so"/>' "/jci/sm/${conf}"
+      echo "Patched aap_service in ${conf}"
+    else
+      echo "aap_service already patched in ${conf}, skipping"
+    fi
   done
 
   # --- Install libraries ---
@@ -65,6 +73,8 @@ then
   echo "libpatch-blmjciaapa.so has been copied"
   cp "${MYDIR}/libpatch-svcjcinavi.so" /data_persist/oem-aa-mod/
   echo "libpatch-svcjcinavi.so has been copied"
+  cp "${MYDIR}/libpatch-aap_service.so" /data_persist/oem-aa-mod/
+  echo "libpatch-aap_service.so has been copied"
   cp "${MYDIR}/resources/libpatch.conf" /data_persist/oem-aa-mod/
   echo "libpatch.conf has been copied"
   chmod 0644 /data_persist/oem-aa-mod/libpatch-*.so
@@ -131,6 +141,8 @@ else
   echo "Removed libpatch-blmjciaapa.so"
   rm -f /data_persist/oem-aa-mod/libpatch-svcjcinavi.so
   echo "Removed libpatch-svcjcinavi.so"
+  rm -f /data_persist/oem-aa-mod/libpatch-aap_service.so
+  echo "Removed libpatch-aap_service.so"
   rm -f /data_persist/oem-aa-mod/libpatch.conf
   echo "Removed libpatch.conf"
   rmdir /data_persist/oem-aa-mod 2>/dev/null && echo "Removed /data_persist/oem-aa-mod directory"
