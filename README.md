@@ -20,7 +20,7 @@ Releases are built automatically whenever a new upstream version is published. D
 
 4. Wait a couple of seconds — the diagnostic menu should launch automatically.
 
-5. In the diagnostic menu, open a terminal and run:
+5. In the diagnostic menu, open a terminal (click 'Next', then 'Terminal') and run:
 
    ```sh
    cd /tmp/mnt/sda1
