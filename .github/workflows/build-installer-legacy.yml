@@ -1,6 +1,10 @@
 name: Build Installer (Legacy Rebuild)
 
 on:
+  schedule:
+    # Poll upstream every 6h at :30. The "Skip if already built" step
+    # below makes repeat runs a no-op until a new tag appears.
+    - cron: '30 */6 * * *'
   workflow_dispatch:
     inputs:
       upstream_tag:
