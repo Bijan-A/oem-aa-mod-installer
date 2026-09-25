@@ -11,18 +11,18 @@ mount -o rw,remount /
 MYDIR=$(dirname "$(readlink -f "$0")")
 mount -o rw,remount ${MYDIR}
 
-# --- Require CMU firmware V74 (any subversion) ---
+# --- Require CMU firmware V74.00.324 ---
 get_cmu_ver()
 {
-  _ver=$(grep "^JCI_SW_VER=" /jci/version.ini | sed 's/^.*_\([^_]*\)\"$/\1/' | cut -d '.' -f 1)
+  _ver=$(grep '^JCI_SW_VER=' /jci/version.ini | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
   echo ${_ver}
 }
 
 CMU_VER=$(get_cmu_ver)
-if [ "${CMU_VER}" != "74" ]
+if [ "${CMU_VER}" != "74.00.324" ]
 then
   /jci/tools/jci-dialog --info --title="oem-aa-mod" \
-    --text="This installer only supports CMU firmware V74.\nDetected version: V${CMU_VER}\nInstallation aborted." \
+    --text="This installer only supports CMU firmware V74.00.324.\nDetected version: V${CMU_VER}\nInstallation aborted.\nRemove USB drive.\nRebooting in 5 seconds..." \
     --no-cancel &
   sleep 5
   killall -q jci-dialog
