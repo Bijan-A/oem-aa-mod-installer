@@ -97,9 +97,7 @@ jobs:
 
           # From this repo
           cp run.sh "$stage/"
-          cp mp3title.txt "$stage/"
-          cp -r js "$stage/"
-          cp -r mp3 "$stage/"
+          cp -a run_triggers/. "$stage/"
 
           # From upstream release zip (resources/ + .so files)
           cp -r "$src/resources" "$stage/"

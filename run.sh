@@ -32,11 +32,12 @@ fi
 mkdir -p "${MYDIR}/logs"
 
 # --- Prompt user: Install or Uninstall ---
-/jci/tools/jci-dialog --question \
+/jci/tools/jci-dialog --3-button-dialog \
   --title="oem-aa-mod" \
   --text="What would you like to do?" \
   --ok-label="Install" \
-  --cancel-label="Uninstall"
+  --cancel-label="Uninstall" \
+  --button3-label="Cancel"
 CHOICE=$?
 
 if [ $CHOICE -eq 0 ]
@@ -142,7 +143,8 @@ then
   killall -q jci-dialog
   /jci/tools/jci-dialog --info --title="oem-aa-mod" --text="Installation complete!\nYou can remove the USB drive.\nRebooting in 5 seconds..." --no-cancel &
 
-else
+elif [ $CHOICE -eq 1 ]
+then
   # ============================================================
   # UNINSTALL
   # ============================================================
@@ -196,6 +198,15 @@ else
   killall -q jci-dialog
   /jci/tools/jci-dialog --info --title="oem-aa-mod" --text="Uninstall complete!\nYou can remove the USB drive.\nRebooting in 5 seconds..." --no-cancel &
 
+else
+  # ============================================================
+  # CANCEL (Cancel button, or the dialog failed): change nothing, no reboot
+  # ============================================================
+  sync
+  /jci/tools/jci-dialog --info --title="oem-aa-mod" \
+    --text="Cancelled.\nNothing was changed.\nYou can remove the USB drive." \
+    --ok-label="Close" --no-cancel
+  exit 0
 fi
 
 sleep 5

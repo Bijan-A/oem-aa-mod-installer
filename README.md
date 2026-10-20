@@ -10,7 +10,6 @@ Releases are built automatically whenever a new upstream version is published. D
 
 - Firmware version **74.00.324**
 - USB flash drive **32 GB or smaller**, formatted as **FAT32**
-- USB keyboard
 
 ## Installation / Uninstallation
 
@@ -18,25 +17,7 @@ Releases are built automatically whenever a new upstream version is published. D
 
 1. Safely eject the drive and plug it into your Mazda.
 
-1. Plug keyboard in secondary USB port of your Mazda
-
-1. In the car, navigate to the **Entertainment** menu and select the **USB Drive**.
-
-1. Wait a couple of seconds — the diagnostic menu should launch automatically.
-
-1. In the diagnostic menu, open a terminal (click 'Next', then 'Terminal') and run:
-
-   ```sh
-   cd /tmp/mnt/sda1
-   ```
-
-   > If nothing happens, try `cd /tmp/mnt/sdb1` instead — this depends on which USB port you used.
-
-1. Run the script:
-
-   ```sh
-   sh run.sh
-   ```
+1. Wait a few seconds for the `oem-aa-mod` installer dialog to automatically appear on the screen.
 
 1. Follow the on-screen prompts to install or uninstall. Once complete, reboot the head unit.
 
